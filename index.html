@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Lee y Une" />
+  <meta name="description" content="Aplicación educativa PWA para primero de primaria: Lee, une con su dibujo y colorea (sílabas M y S)." />
+  <title>Lee y une con su dibujo y luego colorea</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Fuente escolar legible (Andika / Nunito para trazo claro infantil de 1° de primaria) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Andika:ital,wght@0,400;0,700;1,400&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --font-school: 'Andika', 'Nunito', sans-serif;
+      --font-ui: 'Nunito', sans-serif;
+    }
+
+    body {
+      font-family: var(--font-ui);
+      background-color: #f1f5f9;
+      background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+      background-size: 20px 20px;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    .school-text {
+      font-family: var(--font-school);
+      letter-spacing: 0.01em;
+    }
+
+    /* Estilo hoja didáctica inspirada en la referencia */
+    .worksheet-paper {
+      background: #ffffff;
+      border: 3px solid #334155;
+      box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.14);
+      position: relative;
+    }
+
+    .worksheet-inner-border {
+      border: 2px dashed #94a3b8;
+    }
+
+    /* Dibujos SVG estilo libro para colorear */
+    .coloring-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .coloring-svg .paintable {
+      cursor: pointer;
+      transition: fill 0.2s ease, transform 0.15s ease, filter 0.15s ease;
+    }
+
+    .modal-coloring-svg .paintable:hover {
+      filter: brightness(0.94);
+    }
+
+    /* Animaciones de celebración al terminar de colorear */
+    @keyframes celebrateBounce {
+      0% { transform: scale(1) rotate(0deg); }
+      20% { transform: scale(1.22) rotate(-7deg); }
+      40% { transform: scale(1.26) rotate(7deg); }
+      60% { transform: scale(1.18) rotate(-4deg); }
+      80% { transform: scale(1.1) rotate(3deg); }
+      100% { transform: scale(1) rotate(0deg); }
+    }
+
+    .animate-celebrate {
+      animation: celebrateBounce 0.95s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* Animación de error (vibración suave) */
+    @keyframes shakeError {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-6px); }
+      80% { transform: translateX(6px); }
+    }
+
+    .animate-shake {
+      animation: shakeError 0.45s ease-in-out;
+    }
+
+    /* Destellos alrededor del dibujo coloreado */
+    @keyframes popStar {
+      0% { opacity: 0; transform: scale(0.2) translateY(0); }
+      50% { opacity: 1; transform: scale(1.2) translateY(-10px); }
+      100% { opacity: 0; transform: scale(0.6) translateY(-22px); }
+    }
+
+    .star-burst {
+      animation: popStar 0.9s ease-out forwards;
+    }
+
+    /* Puntos de conexión */
+    .anchor-dot {
+      transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .anchor-dot.active {
+      transform: scale(1.35);
+      box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.3);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Barra Superior Fija de Estadísticas -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 shadow-sm">
+    <div class="max-w-5xl mx-auto px-3 py-2.5 sm:px-6 flex flex-wrap items-center justify-between gap-2">
+      <!-- Marca / Título Corto + Botón Instalar PWA -->
+      <div class="flex items-center gap-2">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-xl shadow-sm">
+          ✏️
+        </div>
+        <div>
+          <h1 class="text-sm sm:text-base font-extrabold text-slate-800 leading-tight">Lee, Une y Colorea</h1>
+          <p class="text-[11px] sm:text-xs font-semibold text-slate-500">1° Primaria • Sílabas M y S</p>
+        </div>
+        <button id="btnInstallPwa" class="hidden ml-1 px-2.5 py-1 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-extrabold transition flex items-center gap-1" title="Instalar aplicación">
+          <span>📲 Instalar</span>
+        </button>
+      </div>
+
+      <!-- Indicadores Estadísticos -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Ronda -->
+        <div class="flex items-center gap-1.5 bg-blue-50 border border-blue-200 px-2.5 py-1.5 rounded-xl">
+          <span class="text-xs font-bold text-blue-700 uppercase">Ronda</span>
+          <span id="statRound" class="text-sm sm:text-base font-black text-blue-900 bg-white px-2 py-0.5 rounded-lg shadow-xs">1 / 3</span>
+        </div>
+
+        <!-- Aciertos -->
+        <div class="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-xl">
+          <span class="text-xs font-bold text-emerald-700 uppercase">Aciertos</span>
+          <span id="statHits" class="text-sm sm:text-base font-black text-emerald-900 bg-white px-2 py-0.5 rounded-lg shadow-xs">0 / 5</span>
+        </div>
+
+        <!-- Fallas (máx 1 permitida para avanzar, 2 o más repite ronda) -->
+        <div id="statMistakesBox" class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-xl transition-colors">
+          <span class="text-xs font-bold text-amber-800 uppercase">Fallas</span>
+          <span id="statMistakes" class="text-sm sm:text-base font-black text-amber-900 bg-white px-2 py-0.5 rounded-lg shadow-xs">0</span>
+          <span class="hidden md:inline text-[11px] font-bold text-amber-700">(Mín. &lt; 2)</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Pantalla de Bienvenida / Inicio con Audio -->
+  <div id="welcomeOverlay" class="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center border-4 border-blue-500 shadow-2xl">
+      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-4xl shadow-inner">
+        🎨
+      </div>
+      <h2 class="text-2xl sm:text-3xl font-black text-slate-800 mb-2 leading-tight">
+        ¡Vamos a leer y colorear!
+      </h2>
+      <p class="text-slate-600 font-semibold text-sm sm:text-base mb-5">
+        Lee cada oración de la izquierda, únela con su dibujo de la derecha y dale color.
+      </p>
+      <div class="bg-blue-50 border border-blue-200 rounded-2xl p-3 mb-6 text-xs sm:text-sm text-blue-800 font-bold">
+        ⭐ Completa 3 rondas con menos de 2 fallas en cada una.
+      </div>
+      <button id="btnStartActivity" class="w-full py-4 px-6 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-lg sm:text-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-3 cursor-pointer">
+        <span>🔊</span>
+        <span>COMENZAR ACTIVIDAD</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Contenedor Principal (Hoja Didáctica) -->
+  <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-6 flex flex-col">
+    <div class="worksheet-paper rounded-3xl p-2 sm:p-3 flex-1 flex flex-col">
+      <div class="worksheet-inner-border rounded-2xl p-3 sm:p-6 flex-1 flex flex-col relative">
+
+        <!-- Encabezado estilo ficha didáctica con botón de voz -->
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-5 sm:mb-7">
+          <div class="border-2 border-slate-800 rounded-full px-5 py-2.5 sm:px-8 sm:py-3 bg-white shadow-xs text-center">
+            <h2 class="school-text text-lg sm:text-2xl md:text-3xl font-bold text-slate-900 tracking-wide">
+              Lee y une con su dibujo y luego colorea
+            </h2>
+          </div>
+          <button id="btnRepeatInstruction" type="button" aria-label="Escuchar indicación"
+            class="shrink-0 px-4 py-2.5 rounded-full bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-900 font-extrabold text-sm sm:text-base border-2 border-slate-800 shadow-sm transition flex items-center gap-2 cursor-pointer">
+            <span class="text-xl">🔊</span>
+            <span>Escuchar</span>
+          </button>
+        </div>
+
+        <!-- Banner de Mensaje / Retroalimentación Visual -->
+        <div id="feedbackBanner" class="mb-4 px-4 py-2.5 rounded-2xl text-center font-extrabold text-sm sm:text-base transition-all duration-300 bg-slate-100 text-slate-700 border border-slate-200">
+          Toca una oración de la izquierda y luego su dibujo de la derecha.
+        </div>
+
+        <!-- Área de Juego: Columna Izquierda (Frases) + SVG Líneas + Columna Derecha (Dibujos) -->
+        <div id="matchingBoard" class="relative grid grid-cols-12 gap-2 sm:gap-6 items-center flex-1 my-auto py-1">
+
+          <!-- Capa SVG para las líneas conectoras -->
+          <svg id="connectorSvg" class="absolute inset-0 w-full h-full pointer-events-none z-10"></svg>
+
+          <!-- Columna Izquierda: 5 Frases -->
+          <div id="sentencesColumn" class="col-span-7 sm:col-span-6 flex flex-col justify-between gap-3 sm:gap-4 z-20">
+            <!-- Se llena dinámicamente -->
+          </div>
+
+          <!-- Espacio central para líneas -->
+          <div class="hidden sm:block sm:col-span-1"></div>
+
+          <!-- Columna Derecha: 5 Dibujos -->
+          <div id="drawingsColumn" class="col-span-5 sm:col-span-5 flex flex-col justify-between gap-3 sm:gap-4 z-20">
+            <!-- Se llena dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Pie de ficha -->
+        <div class="mt-5 pt-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-400 font-bold">
+          <span>Material Didáctico Interactivo • 1° Grado</span>
+          <span id="syllableBadge" class="text-slate-500">Sílabas: MA ME MI MO MU • SA SE SI SO SU</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL DE COLOREADO INTERACTIVO -->
+  <div id="coloringModal" class="fixed inset-0 z-40 hidden bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 border-4 border-emerald-500 shadow-2xl flex flex-col items-center">
+      <div class="w-full flex items-center justify-between mb-2">
+        <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs sm:text-sm font-black">
+          🎨 ¡Hora de colorear!
+        </span>
+        <button id="btnAutoColor" type="button" class="px-3 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs sm:text-sm font-extrabold transition flex items-center gap-1 cursor-pointer">
+          <span>✨</span>
+          <span>Pintar mágico</span>
+        </button>
+      </div>
+
+      <!-- Frase leída en pantalla -->
+      <p id="coloringSentence" class="school-text text-xl sm:text-2xl font-bold text-slate-900 text-center my-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-2xl w-full">
+        La manzana es roja.
+      </p>
+
+      <p class="text-xs sm:text-sm font-bold text-slate-500 mb-3 text-center">
+        Elige un color abajo y toca las partes del dibujo:
+      </p>
+
+      <!-- Lienzo SVG grande para colorear -->
+      <div id="coloringCanvasWrapper" class="w-52 h-52 sm:w-64 sm:h-64 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl p-4 flex items-center justify-center mb-4 relative">
+        <!-- SVG insertado dinámicamente -->
+      </div>
+
+      <!-- Paleta de Colores -->
+      <div id="colorPalette" class="grid grid-cols-5 sm:grid-cols-10 gap-2 w-full mb-5">
+        <!-- Botones de color generados por JS -->
+      </div>
+
+      <!-- Botón Finalizar Coloreado -->
+      <button id="btnFinishColoring" type="button" class="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-base sm:text-lg shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2 cursor-pointer">
+        <span>✅</span>
+        <span>¡LISTO, YA COLOREÉ!</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL DE FIN DE RONDA / FIN DE JUEGO -->
+  <div id="roundResultModal" class="fixed inset-0 z-50 hidden bg-slate-900/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 text-center border-4 border-blue-500 shadow-2xl">
+      <div id="resultIcon" class="text-6xl mb-3">🏆</div>
+      <h3 id="resultTitle" class="text-2xl sm:text-3xl font-black text-slate-800 mb-2">
+        ¡Ronda Completada!
+      </h3>
+      <p id="resultMessage" class="text-slate-600 font-bold text-sm sm:text-base mb-5">
+        Excelente trabajo leyendo y coloreando.
+      </p>
+
+      <!-- Resumen de Estadísticas -->
+      <div class="grid grid-cols-3 gap-2 bg-slate-100 p-3 rounded-2xl mb-6 border border-slate-200">
+        <div>
+          <div class="text-[11px] font-bold text-slate-500 uppercase">Ronda</div>
+          <div id="modalStatRound" class="text-lg font-black text-blue-700">1 / 3</div>
+        </div>
+        <div>
+          <div class="text-[11px] font-bold text-slate-500 uppercase">Aciertos</div>
+          <div id="modalStatHits" class="text-lg font-black text-emerald-700">5 / 5</div>
+        </div>
+        <div>
+          <div class="text-[11px] font-bold text-slate-500 uppercase">Fallas</div>
+          <div id="modalStatMistakes" class="text-lg font-black text-amber-700">0</div>
+        </div>
+      </div>
+
+      <button id="btnRoundAction" type="button" class="w-full py-4 px-6 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-lg shadow-lg transition cursor-pointer">
+        SIGUIENTE RONDA ➡️
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. CONFIGURACIÓN PWA (MANIFEST DINÁMICO Y SERVICE WORKER OFFLINE)
+     * ============================================================================
+     */
+    (function setupPWA() {
+      // Icono SVG embebido para el manifest
+      const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+        <rect width="512" height="512" rx="110" fill="#2563eb"/>
+        <circle cx="256" cy="256" r="185" fill="#ffffff"/>
+        <path d="M160 330 L210 170 L256 265 L302 170 L352 330" fill="none" stroke="#1e293b" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="256" cy="365" r="22" fill="#ef4444"/>
+      </svg>`;
+      const iconUrl = 'data:image/svg+xml;base64,' + btoa(iconSvg);
+
+      const manifest = {
+        name: "Lee y une con su dibujo y luego colorea",
+        short_name: "Lee y Une",
+        description: "Aplicación educativa de lectoescritura para primero de primaria (sílabas con M y S).",
+        start_url: "./",
+        display: "standalone",
+        background_color: "#f1f5f9",
+        theme_color: "#2563eb",
+        orientation: "any",
+        icons: [
+          { src: iconUrl, sizes: "192x192", type: "image/svg+xml", purpose: "any maskable" },
+          { src: iconUrl, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }
+        ]
+      };
+
+      try {
+        const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+        const manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = URL.createObjectURL(manifestBlob);
+        document.head.appendChild(manifestLink);
+      } catch (e) {
+        console.warn("No se pudo registrar manifest dinámico:", e);
+      }
+
+      // Service Worker para funcionamiento offline
+      if ('serviceWorker' in navigator) {
+        const swCode = `
+          const CACHE_NAME = 'lee-y-une-v1';
+          self.addEventListener('install', (event) => {
+            self.skipWaiting();
+          });
+          self.addEventListener('activate', (event) => {
+            event.waitUntil(clients.claim());
+          });
+          self.addEventListener('fetch', (event) => {
+            event.respondWith(
+              fetch(event.request).catch(() => caches.match(event.request))
+            );
+          });
+        `;
+        try {
+          const swBlob = new Blob([swCode], { type: 'application/javascript' });
+          navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+        } catch (e) {
+          // Ignorar en entornos sandbox restringidos
+        }
+      }
+
+      // Botón de instalación PWA si el navegador lo soporta
+      let deferredPrompt;
+      const btnInstall = document.getElementById('btnInstallPwa');
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        btnInstall.classList.remove('hidden');
+      });
+      btnInstall.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        btnInstall.classList.add('hidden');
+      });
+    })();
+
+    /**
+     * ============================================================================
+     * 2. SÍNTESIS DE VOZ EN ESPAÑOL DE MÉXICO (es-MX) Y EFECTOS DE SONIDO
+     * ============================================================================
+     */
+    const VoiceEngine = {
+      selectedVoice: null,
+
+      init() {
+        const loadVoices = () => {
+          const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+          if (!voices.length) return;
+          // Priorizar voces en español de México (es-MX)
+          this.selectedVoice =
+            voices.find(v => v.lang.toLowerCase() === 'es-mx' && (v.name.includes('Paulina') || v.name.includes('Dalia') || v.name.includes('Sabina') || v.name.includes('Natural'))) ||
+            voices.find(v => v.lang.toLowerCase() === 'es-mx') ||
+            voices.find(v => v.lang.toLowerCase().startsWith('es-419')) ||
+            voices.find(v => v.lang.toLowerCase().startsWith('es'));
+        };
+        loadVoices();
+        if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+      },
+
+      speak(text, rate = 0.92, pitch = 1.05) {
+        if (!('speechSynthesis' in window)) return;
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'es-MX';
+          if (this.selectedVoice) {
+            utterance.voice = this.selectedVoice;
+          }
+          utterance.rate = rate;
+          utterance.pitch = pitch;
+          window.speechSynthesis.speak(utterance);
+        } catch (err) {
+          console.warn("Error de síntesis de voz:", err);
+        }
+      }
+    };
+
+    // Efectos de sonido suaves usando Web Audio API (sin archivos externos)
+    const SoundFX = {
+      ctx: null,
+      ensureContext() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      playPop() {
+        this.ensureContext();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(780, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.09);
+      },
+      playSuccess() {
+        this.ensureContext();
+        if (!this.ctx) return;
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          const t = this.ctx.currentTime + idx * 0.09;
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.18, t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.26);
+        });
+      },
+      playError() {
+        this.ensureContext();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(165, this.ctx.currentTime + 0.22);
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.24);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+      }
+    };
+
+    /**
+     * ============================================================================
+     * 3. BANCO DE 20 PALABRAS E ILUSTRACIONES SVG DETALLADAS (10 CON M Y 10 CON S)
+     * ============================================================================
+     * Cada SVG está diseñado con contornos negros gruesos (#1e293b) y partes
+     * cerradas con clase "paintable" y atributo "data-default-color" para
+     * coloreado manual o mágico.
+     */
+    const WORD_BANK = [
+      // ==================== LETRA M (MA, ME, MI, MO, MU) ====================
+      {
+        id: 'm_manzana',
+        letter: 'M',
+        syllable: 'MA',
+        word: 'Manzana',
+        sentence: 'La manzana es roja.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#16a34a" d="M70 36 C75 18, 98 16, 102 28 C94 38, 78 38, 70 36 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <path class="paintable" data-default="#78350f" d="M66 38 L66 20 L74 20 L74 38 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <path class="paintable" data-default="#ef4444" d="M70 42 C46 32, 24 48, 26 78 C28 106, 50 122, 70 116 C90 122, 112 106, 114 78 C116 48, 94 32, 70 42 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <path d="M42 56 C38 66, 38 78, 42 88" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 'm_mano',
+        letter: 'M',
+        syllable: 'MA',
+        word: 'Mano',
+        sentence: 'Esa es mi mano.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#fed7aa" d="M46 72 L46 34 C46 28, 55 28, 55 34 L55 64 L58 24 C58 18, 67 18, 67 24 L67 62 L71 22 C71 16, 80 16, 80 22 L80 64 L84 30 C84 24, 93 24, 93 30 L93 74 L106 60 C111 55, 118 62, 113 68 L96 94 C92 108, 82 118, 68 118 C52 118, 42 106, 42 88 L42 72 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <path d="M58 84 C65 80, 75 80, 82 86" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 'm_mesa',
+        letter: 'M',
+        syllable: 'ME',
+        word: 'Mesa',
+        sentence: 'La mesa es de Memo.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <rect class="paintable" data-default="#b45309" x="26" y="62" width="12" height="58" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <rect class="paintable" data-default="#b45309" x="102" y="62" width="12" height="58" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <rect class="paintable" data-default="#92400e" x="42" y="62" width="10" height="44" rx="2" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <rect class="paintable" data-default="#92400e" x="88" y="62" width="10" height="44" rx="2" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <polygon class="paintable" data-default="#f59e0b" points="30,36 110,36 126,54 14,54" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <rect class="paintable" data-default="#d97706" x="14" y="54" width="112" height="10" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+        </svg>`
+      },
+      {
+        id: 'm_medalla',
+        letter: 'M',
+        syllable: 'ME',
+        word: 'Medalla',
+        sentence: 'Mi mamá ganó una medalla.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <polygon class="paintable" data-default="#2563eb" points="42,18 62,18 74,56 56,56" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <polygon class="paintable" data-default="#ef4444" points="98,18 78,18 66,56 84,56" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <circle class="paintable" data-default="#facc15" cx="70" cy="88" r="34" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <polygon class="paintable" data-default="#f97316" points="70,64 76,80 93,80 79,90 84,106 70,96 56,106 61,90 47,80 64,80" fill="#ffffff" stroke="#1e293b" stroke-width="3" stroke-linejoin="round"/>
+        </svg>`
+      },
+      {
+        id: 'm_miel',
+        letter: 'M',
+        syllable: 'MI',
+        word: 'Miel',
+        sentence: 'El oso toma miel.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#fef3c7" d="M38 48 C28 60, 28 106, 44 118 L96 118 C112 106, 112 60, 102 48 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <path class="paintable" data-default="#f59e0b" d="M38 48 L102 48 C105 56, 98 66, 92 60 C86 54, 82 74, 75 74 C68 74, 66 56, 58 62 C50 68, 44 58, 38 48 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <rect class="paintable" data-default="#d97706" x="42" y="32" width="56" height="16" rx="6" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <ellipse class="paintable" data-default="#fde047" cx="70" cy="92" rx="22" ry="14" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+        </svg>`
+      },
+      {
+        id: 'm_microfono',
+        letter: 'M',
+        syllable: 'MI',
+        word: 'Micrófono',
+        sentence: 'Susi canta con el micrófono.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <polygon class="paintable" data-default="#64748b" points="56,64 84,64 78,120 62,120" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <rect class="paintable" data-default="#ef4444" x="65" y="76" width="10" height="18" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="2.5"/>
+          <circle class="paintable" data-default="#38bdf8" cx="70" cy="44" r="24" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <line x1="46" y1="44" x2="94" y2="44" stroke="#1e293b" stroke-width="3.5"/>
+          <path d="M52 32 L88 32 M52 56 L88 56" stroke="#1e293b" stroke-width="2.5"/>
+        </svg>`
+      },
+      {
+        id: 'm_mono',
+        letter: 'M',
+        syllable: 'MO',
+        word: 'Mono',
+        sentence: 'El mono come plátano.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <circle class="paintable" data-default="#92400e" cx="28" cy="64" r="16" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#92400e" cx="112" cy="64" r="16" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#fde68a" cx="28" cy="64" r="8" fill="#ffffff" stroke="#1e293b" stroke-width="2.5"/>
+          <circle class="paintable" data-default="#fde68a" cx="112" cy="64" r="8" fill="#ffffff" stroke="#1e293b" stroke-width="2.5"/>
+          <circle class="paintable" data-default="#78350f" cx="70" cy="70" r="38" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <ellipse class="paintable" data-default="#fed7aa" cx="70" cy="84" rx="28" ry="20" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <circle cx="57" cy="58" r="4.5" fill="#1e293b"/>
+          <circle cx="83" cy="58" r="4.5" fill="#1e293b"/>
+          <path d="M56 84 Q70 96 84 84" fill="none" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 'm_moto',
+        letter: 'M',
+        syllable: 'MO',
+        word: 'Moto',
+        sentence: 'La moto es rápida.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <circle class="paintable" data-default="#334155" cx="34" cy="98" r="20" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#cbd5e1" cx="34" cy="98" r="9" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <circle class="paintable" data-default="#334155" cx="106" cy="98" r="20" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#cbd5e1" cx="106" cy="98" r="9" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <path class="paintable" data-default="#ef4444" d="M34 98 L54 66 L86 66 L106 98 L82 98 L68 78 L48 98 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <path class="paintable" data-default="#1e293b" d="M44 62 L72 62 L68 54 L42 54 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3" stroke-linejoin="round"/>
+          <path d="M84 66 L92 44 L104 44" fill="none" stroke="#1e293b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`
+      },
+      {
+        id: 'm_muneca',
+        letter: 'M',
+        syllable: 'MU',
+        word: 'Muñeca',
+        sentence: 'La muñeca es de Ema.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <circle class="paintable" data-default="#facc15" cx="38" cy="42" r="14" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <circle class="paintable" data-default="#facc15" cx="102" cy="42" r="14" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <polygon class="paintable" data-default="#ec4899" points="54,76 86,76 102,122 38,122" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <circle class="paintable" data-default="#fed7aa" cx="70" cy="48" r="24" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle cx="62" cy="45" r="3.5" fill="#1e293b"/>
+          <circle cx="78" cy="45" r="3.5" fill="#1e293b"/>
+          <path d="M62 56 Q70 63 78 56" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 'm_muela',
+        letter: 'M',
+        syllable: 'MU',
+        word: 'Muela',
+        sentence: 'Me duele una muela.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#f8fafc" d="M36 44 C36 24, 58 24, 70 32 C82 24, 104 24, 104 44 C104 66, 96 76, 94 106 C93 116, 82 116, 78 104 L70 84 L62 104 C58 116, 47 116, 46 106 C44 76, 36 66, 36 44 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <circle cx="58" cy="52" r="3.5" fill="#1e293b"/>
+          <circle cx="82" cy="52" r="3.5" fill="#1e293b"/>
+          <path d="M62 64 Q70 70 78 64" fill="none" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
+        </svg>`
+      },
+
+      // ==================== LETRA S (SA, SE, SI, SO, SU) ====================
+      {
+        id: 's_sapo',
+        letter: 'S',
+        syllable: 'SA',
+        word: 'Sapo',
+        sentence: 'Ese sapo salta alto.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <circle class="paintable" data-default="#22c55e" cx="46" cy="44" r="14" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#22c55e" cx="94" cy="44" r="14" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle cx="46" cy="44" r="5" fill="#1e293b"/>
+          <circle cx="94" cy="44" r="5" fill="#1e293b"/>
+          <ellipse class="paintable" data-default="#4ade80" cx="70" cy="80" rx="44" ry="34" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <ellipse class="paintable" data-default="#fef08a" cx="70" cy="92" rx="28" ry="18" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <path d="M44 72 Q70 86 96 72" fill="none" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 's_sandia',
+        letter: 'S',
+        syllable: 'SA',
+        word: 'Sandía',
+        sentence: 'La sandía es dulce.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#16a34a" d="M18 54 C18 96, 122 96, 122 54 L110 54 C110 82, 30 82, 30 54 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <path class="paintable" data-default="#ef4444" d="M30 54 L110 54 C110 82, 30 82, 30 54 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <circle cx="54" cy="64" r="2.8" fill="#1e293b"/>
+          <circle cx="70" cy="68" r="2.8" fill="#1e293b"/>
+          <circle cx="86" cy="64" r="2.8" fill="#1e293b"/>
+        </svg>`
+      },
+      {
+        id: 's_semaforo',
+        letter: 'S',
+        syllable: 'SE',
+        word: 'Semáforo',
+        sentence: 'El semáforo está en verde.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <rect class="paintable" data-default="#64748b" x="64" y="104" width="12" height="22" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <rect class="paintable" data-default="#334155" x="46" y="16" width="48" height="90" rx="12" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#ef4444" cx="70" cy="36" r="10" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <circle class="paintable" data-default="#facc15" cx="70" cy="61" r="10" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <circle class="paintable" data-default="#22c55e" cx="70" cy="86" r="10" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+        </svg>`
+      },
+      {
+        id: 's_serpiente',
+        letter: 'S',
+        syllable: 'SE',
+        word: 'Serpiente',
+        sentence: 'La serpiente es larga.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#22c55e" d="M32 106 C32 86, 108 88, 108 68 C108 48, 38 52, 38 34 C38 22, 62 20, 74 28 C82 34, 76 42, 64 40 C54 38, 56 44, 82 48 C116 52, 122 78, 92 88 C62 98, 52 102, 52 110 C52 118, 32 118, 32 106 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <circle cx="62" cy="27" r="3" fill="#1e293b"/>
+          <path d="M76 31 L88 27 M82 29 L88 33" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 's_silla',
+        letter: 'S',
+        syllable: 'SI',
+        word: 'Silla',
+        sentence: 'Susi se sienta en la silla.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <rect class="paintable" data-default="#d97706" x="44" y="22" width="52" height="50" rx="6" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <rect class="paintable" data-default="#f59e0b" x="38" y="70" width="64" height="14" rx="4" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <rect class="paintable" data-default="#b45309" x="44" y="84" width="12" height="38" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <rect class="paintable" data-default="#b45309" x="84" y="84" width="12" height="38" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+        </svg>`
+      },
+      {
+        id: 's_sirena',
+        letter: 'S',
+        syllable: 'SI',
+        word: 'Sirena',
+        sentence: 'La sirena nada en el mar.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#ef4444" d="M46 38 C46 18, 94 18, 94 38 L94 60 L46 60 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <circle class="paintable" data-default="#fed7aa" cx="70" cy="40" r="16" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <path class="paintable" data-default="#06b6d4" d="M56 64 L84 64 C86 86, 78 100, 70 108 C62 100, 54 86, 56 64 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <path class="paintable" data-default="#38bdf8" d="M70 108 L46 122 L58 104 Z M70 108 L94 122 L82 104 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <circle cx="65" cy="38" r="2.5" fill="#1e293b"/>
+          <circle cx="75" cy="38" r="2.5" fill="#1e293b"/>
+        </svg>`
+      },
+      {
+        id: 's_sol',
+        letter: 'S',
+        syllable: 'SO',
+        word: 'Sol',
+        sentence: 'El sol sale de día.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <g stroke="#1e293b" stroke-width="4" stroke-linecap="round">
+            <line x1="70" y1="14" x2="70" y2="30"/>
+            <line x1="70" y1="110" x2="70" y2="126"/>
+            <line x1="14" y1="70" x2="30" y2="70"/>
+            <line x1="110" y1="70" x2="126" y2="70"/>
+            <line x1="30" y1="30" x2="42" y2="42"/>
+            <line x1="98" y1="98" x2="110" y2="110"/>
+            <line x1="110" y1="30" x2="98" y2="42"/>
+            <line x1="42" y1="98" x2="30" y2="110"/>
+          </g>
+          <circle class="paintable" data-default="#facc15" cx="70" cy="70" r="30" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle cx="60" cy="65" r="3.5" fill="#1e293b"/>
+          <circle cx="80" cy="65" r="3.5" fill="#1e293b"/>
+          <path d="M58 76 Q70 86 82 76" fill="none" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>`
+      },
+      {
+        id: 's_sopa',
+        letter: 'S',
+        syllable: 'SO',
+        word: 'Sopa',
+        sentence: 'Mi mamá hace sopa.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path d="M52 44 Q48 32 54 22 M70 40 Q66 28 72 18 M88 44 Q84 32 90 22" fill="none" stroke="#1e293b" stroke-width="3.5" stroke-linecap="round"/>
+          <ellipse class="paintable" data-default="#f97316" cx="70" cy="60" rx="46" ry="12" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <path class="paintable" data-default="#38bdf8" d="M24 60 C24 98, 44 114, 70 114 C96 114, 116 98, 116 60 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+          <rect class="paintable" data-default="#cbd5e1" x="48" y="114" width="44" height="8" rx="3" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+        </svg>`
+      },
+      {
+        id: 's_suma',
+        letter: 'S',
+        syllable: 'SU',
+        word: 'Suma',
+        sentence: 'Memo hace una suma.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <rect class="paintable" data-default="#fef08a" x="22" y="22" width="96" height="96" rx="18" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <path class="paintable" data-default="#2563eb" d="M60 40 L80 40 L80 60 L100 60 L100 80 L80 80 L80 100 L60 100 L60 80 L40 80 L40 60 L60 60 Z" fill="#ffffff" stroke="#1e293b" stroke-width="4" stroke-linejoin="round"/>
+        </svg>`
+      },
+      {
+        id: 's_submarino',
+        letter: 'S',
+        syllable: 'SU',
+        word: 'Submarino',
+        sentence: 'El submarino va bajo el mar.',
+        svg: `<svg viewBox="0 0 140 140" class="coloring-svg">
+          <path class="paintable" data-default="#f97316" d="M62 56 L62 32 L78 32 L78 40 L70 40 L70 56 Z" fill="#ffffff" stroke="#1e293b" stroke-width="3.5" stroke-linejoin="round"/>
+          <rect class="paintable" data-default="#facc15" x="48" y="48" width="40" height="18" rx="8" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+          <ellipse class="paintable" data-default="#eab308" cx="72" cy="84" rx="46" ry="24" fill="#ffffff" stroke="#1e293b" stroke-width="4"/>
+          <circle class="paintable" data-default="#38bdf8" cx="54" cy="84" r="8" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <circle class="paintable" data-default="#38bdf8" cx="78" cy="84" r="8" fill="#ffffff" stroke="#1e293b" stroke-width="3"/>
+          <rect class="paintable" data-default="#ef4444" x="14" y="74" width="12" height="20" rx="4" fill="#ffffff" stroke="#1e293b" stroke-width="3.5"/>
+        </svg>`
+      }
+    ];
+
+    // Paleta de 10 colores vibrantes para niños
+    const COLOR_PALETTE = [
+      { name: 'Rojo', hex: '#ef4444' },
+      { name: 'Azul', hex: '#3b82f6' },
+      { name: 'Amarillo', hex: '#facc15' },
+      { name: 'Verde', hex: '#22c55e' },
+      { name: 'Naranja', hex: '#f97316' },
+      { name: 'Morado', hex: '#a855f7' },
+      { name: 'Rosa', hex: '#ec4899' },
+      { name: 'Café', hex: '#92400e' },
+      { name: 'Celeste', hex: '#38bdf8' },
+      { name: 'Piel', hex: '#fed7aa' }
+    ];
+
+    // Frases de motivación en caso de error
+    const ENCOURAGEMENT_PHRASES = [
+      "INTÉNTALO NUEVAMENTE",
+      "ESFUÉRZATE",
+      "SÉ QUE TÚ PUEDES"
+    ];
+
+    /**
+     * ============================================================================
+     * 4. ESTADO DEL JUEGO Y LÓGICA DE RONDAS (3 RONDAS, 5 PARES POR RONDA)
+     * ============================================================================
+     */
+    const GameState = {
+      round: 1,
+      maxRounds: 3,
+      hits: 0,
+      mistakes: 0,
+      usedWordIds: new Set(),
+      roundPairs: [],       // Las 5 parejas de la ronda actual
+      shuffledDrawings: [], // Las 5 parejas desordenadas para la columna derecha
+      matchedIds: new Set(),
+      coloredSvgs: {},      // Almacena el HTML del SVG ya coloreado por id
+      selectedSentenceId: null,
+      selectedDrawingId: null,
+      activeColor: '#ef4444',
+      currentlyColoringId: null
+    };
+
+    // Utilidad para mezclar arreglos (Fisher-Yates)
+    function shuffleArray(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    // Actualiza la barra superior de estadísticas
+    function updateStatsUI() {
+      document.getElementById('statRound').textContent = `${GameState.round} / ${GameState.maxRounds}`;
+      document.getElementById('statHits').textContent = `${GameState.hits} / 5`;
+      document.getElementById('statMistakes').textContent = `${GameState.mistakes}`;
+
+      const mistakesBox = document.getElementById('statMistakesBox');
+      if (GameState.mistakes >= 2) {
+        mistakesBox.className = 'flex items-center gap-1.5 bg-red-100 border border-red-300 px-2.5 py-1.5 rounded-xl transition-colors';
+      } else {
+        mistakesBox.className = 'flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-xl transition-colors';
+      }
+    }
+
+    function setFeedbackBanner(text, type = 'neutral') {
+      const banner = document.getElementById('feedbackBanner');
+      banner.textContent = text;
+      const styles = {
+        neutral: 'mb-4 px-4 py-2.5 rounded-2xl text-center font-extrabold text-sm sm:text-base transition-all duration-300 bg-slate-100 text-slate-700 border border-slate-200',
+        info: 'mb-4 px-4 py-2.5 rounded-2xl text-center font-extrabold text-sm sm:text-base transition-all duration-300 bg-blue-100 text-blue-800 border border-blue-300',
+        success: 'mb-4 px-4 py-2.5 rounded-2xl text-center font-extrabold text-sm sm:text-base transition-all duration-300 bg-emerald-100 text-emerald-800 border border-emerald-300',
+        error: 'mb-4 px-4 py-2.5 rounded-2xl text-center font-extrabold text-sm sm:text-base transition-all duration-300 bg-rose-100 text-rose-800 border border-rose-300'
+      };
+      banner.className = styles[type] || styles.neutral;
+    }
+
+    /**
+     * Inicia o reinicia una ronda seleccionando 5 palabras aleatorias (mezclando M y S)
+     */
+    function setupRound() {
+      GameState.hits = 0;
+      GameState.mistakes = 0;
+      GameState.matchedIds.clear();
+      GameState.coloredSvgs = {};
+      GameState.selectedSentenceId = null;
+      GameState.selectedDrawingId = null;
+
+      // Filtrar palabras no usadas aún; si quedan menos de 5, reiniciar pool
+      let availableM = WORD_BANK.filter(w => w.letter === 'M' && !GameState.usedWordIds.has(w.id));
+      let availableS = WORD_BANK.filter(w => w.letter === 'S' && !GameState.usedWordIds.has(w.id));
+
+      if (availableM.length < 3 || availableS.length < 3) {
+        GameState.usedWordIds.clear();
+        availableM = WORD_BANK.filter(w => w.letter === 'M');
+        availableS = WORD_BANK.filter(w => w.letter === 'S');
+      }
+
+      // Tomar 3 de M y 2 de S (o viceversa aleatoriamente) para tener 5 por ronda
+      const mCount = Math.random() < 0.5 ? 3 : 2;
+      const sCount = 5 - mCount;
+
+      const pickedM = shuffleArray(availableM).slice(0, mCount);
+      const pickedS = shuffleArray(availableS).slice(0, sCount);
+      const combined = shuffleArray([...pickedM, ...pickedS]);
+
+      combined.forEach(item => GameState.usedWordIds.add(item.id));
+
+      GameState.roundPairs = combined;
+      // Asegurar que el orden de dibujos a la derecha sea distinto al de las frases
+      let shuffledRight = shuffleArray(combined);
+      if (shuffledRight.every((item, idx) => item.id === combined[idx].id)) {
+        shuffledRight.reverse();
+      }
+      GameState.shuffledDrawings = shuffledRight;
+
+      updateStatsUI();
+      renderBoard();
+      setFeedbackBanner(`Ronda ${GameState.round}: Lee cada oración y únela con su dibujo.`, 'info');
+    }
+
+    /**
+     * Renderiza las 5 frases a la izquierda y los 5 dibujos a la derecha
+     */
+    function renderBoard() {
+      const sentencesCol = document.getElementById('sentencesColumn');
+      const drawingsCol = document.getElementById('drawingsColumn');
+      sentencesCol.innerHTML = '';
+      drawingsCol.innerHTML = '';
+
+      // Renderizar frases (Columna izquierda)
+      GameState.roundPairs.forEach((item) => {
+        const isMatched = GameState.matchedIds.has(item.id);
+        const isSelected = GameState.selectedSentenceId === item.id;
+
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.dataset.sentenceId = item.id;
+        card.disabled = isMatched;
+
+        let cardClass = 'group relative w-full text-left px-3.5 py-3.5 sm:px-5 sm:py-4 rounded-2xl border-2 transition-all duration-200 flex items-center justify-between gap-2 cursor-pointer ';
+        if (isMatched) {
+          cardClass += 'bg-emerald-50 border-emerald-500 text-emerald-950 cursor-default';
+        } else if (isSelected) {
+          cardClass += 'bg-blue-50 border-blue-600 ring-4 ring-blue-200 scale-[1.02]';
+        } else {
+          cardClass += 'bg-white border-slate-300 hover:border-blue-400 hover:bg-slate-50 shadow-xs';
+        }
+        card.className = cardClass;
+
+        card.innerHTML = `
+          <span class="school-text text-base sm:text-xl md:text-2xl font-bold leading-snug pr-2">
+            ${item.sentence}
+          </span>
+          <span data-anchor-sentence="${item.id}"
+            class="anchor-dot shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-slate-800 ${
+              isMatched ? 'bg-emerald-500' : isSelected ? 'bg-blue-600 active' : 'bg-white group-hover:bg-blue-200'
+            }">
+          </span>
+        `;
+
+        card.addEventListener('click', () => handleSelectSentence(item.id));
+        sentencesCol.appendChild(card);
+      });
+
+      // Renderizar dibujos (Columna derecha)
+      GameState.shuffledDrawings.forEach((item) => {
+        const isMatched = GameState.matchedIds.has(item.id);
+        const isSelected = GameState.selectedDrawingId === item.id;
+
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.dataset.drawingId = item.id;
+
+        let cardClass = 'group relative w-full p-2 sm:p-3 rounded-2xl border-2 transition-all duration-200 flex items-center justify-between gap-2 cursor-pointer ';
+        if (isMatched) {
+          cardClass += 'bg-emerald-50/70 border-emerald-500';
+        } else if (isSelected) {
+          cardClass += 'bg-blue-50 border-blue-600 ring-4 ring-blue-200 scale-[1.03]';
+        } else {
+          cardClass += 'bg-white border-slate-300 hover:border-blue-400 shadow-xs';
+        }
+        card.className = cardClass;
+
+        const svgMarkup = GameState.coloredSvgs[item.id] || item.svg;
+
+        card.innerHTML = `
+          <span data-anchor-drawing="${item.id}"
+            class="anchor-dot shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-slate-800 ${
+              isMatched ? 'bg-emerald-500' : isSelected ? 'bg-blue-600 active' : 'bg-white group-hover:bg-blue-200'
+            }">
+          </span>
+          <div id="board-svg-box-${item.id}" class="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 mx-auto flex items-center justify-center relative">
+            ${svgMarkup}
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          if (isMatched) {
+            // Permitir volver a abrir el coloreado si el niño quiere retocar su dibujo
+            openColoringModal(item.id);
+          } else {
+            handleSelectDrawing(item.id);
+          }
+        });
+        drawingsCol.appendChild(card);
+      });
+
+      requestAnimationFrame(drawConnectorLines);
+    }
+
+    /**
+     * Dibuja líneas conectoras SVG entre los puntos unidos
+     */
+    function drawConnectorLines() {
+      const svg = document.getElementById('connectorSvg');
+      const board = document.getElementById('matchingBoard');
+      if (!svg || !board) return;
+
+      const boardRect = board.getBoundingClientRect();
+      svg.setAttribute('viewBox', `0 0 ${boardRect.width} ${boardRect.height}`);
+      svg.innerHTML = '';
+
+      GameState.matchedIds.forEach((id) => {
+        const leftDot = board.querySelector(`[data-anchor-sentence="${id}"]`);
+        const rightDot = board.querySelector(`[data-anchor-drawing="${id}"]`);
+        if (!leftDot || !rightDot) return;
+
+        const r1 = leftDot.getBoundingClientRect();
+        const r2 = rightDot.getBoundingClientRect();
+
+        const x1 = r1.left + r1.width / 2 - boardRect.left;
+        const y1 = r1.top + r1.height / 2 - boardRect.top;
+        const x2 = r2.left + r2.width / 2 - boardRect.left;
+        const y2 = r2.top + r2.height / 2 - boardRect.top;
+
+        // Curva suave estilo trazo de lápiz de color
+        const cx1 = x1 + (x2 - x1) * 0.45;
+        const cx2 = x1 + (x2 - x1) * 0.55;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${x1} ${y1} C ${cx1} ${y1}, ${cx2} ${y2}, ${x2} ${y2}`);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#10b981');
+        path.setAttribute('stroke-width', '5');
+        path.setAttribute('stroke-linecap', 'round');
+        svg.appendChild(path);
+      });
+    }
+
+    window.addEventListener('resize', drawConnectorLines);
+
+    /**
+     * Manejo de selección de frase y dibujo
+     */
+    function handleSelectSentence(id) {
+      if (GameState.matchedIds.has(id)) return;
+      SoundFX.playPop();
+      GameState.selectedSentenceId = (GameState.selectedSentenceId === id) ? null : id;
+      renderBoard();
+      checkPairMatch();
+    }
+
+    function handleSelectDrawing(id) {
+      if (GameState.matchedIds.has(id)) return;
+      SoundFX.playPop();
+      GameState.selectedDrawingId = (GameState.selectedDrawingId === id) ? null : id;
+      renderBoard();
+      checkPairMatch();
+    }
+
+    function checkPairMatch() {
+      const sId = GameState.selectedSentenceId;
+      const dId = GameState.selectedDrawingId;
+      if (!sId || !dId) return;
+
+      if (sId === dId) {
+        // ¡ACIERTO!
+        const matchedItem = WORD_BANK.find(w => w.id === sId);
+        GameState.matchedIds.add(sId);
+        GameState.hits += 1;
+        GameState.selectedSentenceId = null;
+        GameState.selectedDrawingId = null;
+
+        updateStatsUI();
+        renderBoard();
+        SoundFX.playSuccess();
+
+        setFeedbackBanner(`¡Muy bien! "${matchedItem.sentence}" Ahora coloréalo.`, 'success');
+
+        // Leer la frase completa en voz alta (es-MX) y abrir la opción de colorear
+        VoiceEngine.speak(matchedItem.sentence, 0.9);
+        setTimeout(() => {
+          openColoringModal(sId);
+        }, 650);
+
+      } else {
+        // ¡INCORRECTO!
+        GameState.mistakes += 1;
+        updateStatsUI();
+        SoundFX.playError();
+
+        const randomPhrase = ENCOURAGEMENT_PHRASES[Math.floor(Math.random() * ENCOURAGEMENT_PHRASES.length)];
+        setFeedbackBanner(`❌ ${randomPhrase}`, 'error');
+        VoiceEngine.speak(randomPhrase, 0.95, 1.08);
+
+        // Efecto visual de vibración en tarjetas seleccionadas
+        const sCard = document.querySelector(`[data-sentence-id="${sId}"]`);
+        const dCard = document.querySelector(`[data-drawing-id="${dId}"]`);
+        if (sCard) {
+          sCard.classList.add('animate-shake', 'border-red-500', 'bg-red-50');
+        }
+        if (dCard) {
+          dCard.classList.add('animate-shake', 'border-red-500', 'bg-red-50');
+        }
+
+        setTimeout(() => {
+          GameState.selectedSentenceId = null;
+          GameState.selectedDrawingId = null;
+          renderBoard();
+        }, 550);
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 5. ESTUDIO DE COLOREADO Y ANIMACIÓN CELEBRATORIA
+     * ============================================================================
+     */
+    function buildColorPalette() {
+      const container = document.getElementById('colorPalette');
+      container.innerHTML = '';
+      COLOR_PALETTE.forEach((col) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = col.name;
+        btn.ariaLabel = col.name;
+        btn.style.backgroundColor = col.hex;
+        btn.className = `w-10 h-10 sm:w-11 sm:h-11 rounded-full border-3 transition-transform cursor-pointer mx-auto shadow-sm ${
+          GameState.activeColor === col.hex ? 'border-slate-900 scale-115 ring-4 ring-slate-300' : 'border-white hover:scale-105'
+        }`;
+        btn.addEventListener('click', () => {
+          GameState.activeColor = col.hex;
+          SoundFX.playPop();
+          buildColorPalette();
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function openColoringModal(wordId) {
+      const item = WORD_BANK.find(w => w.id === wordId);
+      if (!item) return;
+
+      GameState.currentlyColoringId = wordId;
+      document.getElementById('coloringSentence').textContent = item.sentence;
+
+      const wrapper = document.getElementById('coloringCanvasWrapper');
+      wrapper.innerHTML = GameState.coloredSvgs[wordId] || item.svg;
+
+      const svgEl = wrapper.querySelector('svg');
+      if (svgEl) {
+        svgEl.classList.add('modal-coloring-svg');
+        const parts = svgEl.querySelectorAll('.paintable');
+        parts.forEach((part) => {
+          part.addEventListener('click', (e) => {
+            e.stopPropagation();
+            part.setAttribute('fill', GameState.activeColor);
+            SoundFX.playPop();
+          });
+        });
+      }
+
+      buildColorPalette();
+      document.getElementById('coloringModal').classList.remove('hidden');
+    }
+
+    // Botón "Pintar mágico" para rellenar automáticamente con los colores sugeridos
+    document.getElementById('btnAutoColor').addEventListener('click', () => {
+      const wrapper = document.getElementById('coloringCanvasWrapper');
+      const parts = wrapper.querySelectorAll('.paintable');
+      parts.forEach((part) => {
+        const defColor = part.getAttribute('data-default') || GameState.activeColor;
+        part.setAttribute('fill', defColor);
+      });
+      SoundFX.playSuccess();
+    });
+
+    // Finalizar coloreado, guardar SVG pintado y lanzar animación en el tablero
+    document.getElementById('btnFinishColoring').addEventListener('click', () => {
+      const wordId = GameState.currentlyColoringId;
+      if (!wordId) return;
+
+      const wrapper = document.getElementById('coloringCanvasWrapper');
+      const svgEl = wrapper.querySelector('svg');
+
+      if (svgEl) {
+        // Si el niño no pintó ninguna pieza aún, aplicamos colores automáticamente para que luzca bonito
+        const parts = Array.from(svgEl.querySelectorAll('.paintable'));
+        const anyPainted = parts.some(p => {
+          const f = (p.getAttribute('fill') || '').toLowerCase();
+          return f && f !== '#ffffff' && f !== 'white';
+        });
+        if (!anyPainted) {
+          parts.forEach(p => p.setAttribute('fill', p.getAttribute('data-default') || '#facc15'));
+        }
+        svgEl.classList.remove('modal-coloring-svg');
+        GameState.coloredSvgs[wordId] = svgEl.outerHTML;
+      }
+
+      document.getElementById('coloringModal').classList.add('hidden');
+      renderBoard();
+      triggerDrawingAnimation(wordId);
+
+      // Verificar si ya completó los 5 pares de la ronda
+      if (GameState.matchedIds.size === 5) {
+        setTimeout(() => {
+          evaluateRoundCompletion();
+        }, 1250);
+      }
+    });
+
+    /**
+     * Animación alegre sobre el dibujo recién coloreado
+     */
+    function triggerDrawingAnimation(wordId) {
+      const box = document.getElementById(`board-svg-box-${wordId}`);
+      if (!box) return;
+
+      SoundFX.playSuccess();
+      box.classList.add('animate-celebrate');
+
+      // Estrellitas alrededor
+      const stars = ['⭐', '✨', '🌟', '🎉'];
+      stars.forEach((emoji, i) => {
+        const span = document.createElement('span');
+        span.textContent = emoji;
+        span.className = 'star-burst absolute text-xl pointer-events-none';
+        span.style.left = `${15 + i * 22}%`;
+        span.style.top = `${i % 2 === 0 ? '5%' : '65%'}`;
+        box.appendChild(span);
+        setTimeout(() => span.remove(), 950);
+      });
+
+      setTimeout(() => {
+        box.classList.remove('animate-celebrate');
+      }, 1000);
+    }
+
+    /**
+     * ============================================================================
+     * 6. EVALUACIÓN DE FIN DE RONDA (REGLAS DE FALLAS Y REINICIO)
+     * ============================================================================
+     * Regla:
+     * - Si la ronda tiene menos de 2 fallas (< 2): pasa a la siguiente ronda.
+     * - Si tiene 2 o más fallas (>= 2): repite la ronda con nuevo orden aleatorio.
+     * - En la última ronda (Ronda 3), si tiene menos de 2 fallas: muestra victoria
+     *   y opción de Reiniciar la actividad.
+     */
+    function evaluateRoundCompletion() {
+      const modal = document.getElementById('roundResultModal');
+      const icon = document.getElementById('resultIcon');
+      const title = document.getElementById('resultTitle');
+      const msg = document.getElementById('resultMessage');
+      const btn = document.getElementById('btnRoundAction');
+
+      document.getElementById('modalStatRound').textContent = `${GameState.round} / ${GameState.maxRounds}`;
+      document.getElementById('modalStatHits').textContent = `${GameState.hits} / 5`;
+      document.getElementById('modalStatMistakes').textContent = `${GameState.mistakes}`;
+
+      const passed = GameState.mistakes < 2;
+
+      if (!passed) {
+        // Repetir ronda por tener 2 o más fallas
+        icon.textContent = '💪';
+        title.textContent = '¡Vamos a intentarlo otra vez!';
+        msg.textContent = `Tuviste ${GameState.mistakes} fallas. Necesitas menos de 2 fallas para avanzar. ¡Tú puedes lograrlo!`;
+        btn.textContent = '🔄 REPETIR RONDA';
+        btn.className = 'w-full py-4 px-6 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-900 font-black text-lg shadow-lg transition cursor-pointer';
+
+        VoiceEngine.speak('Tuviste dos o más fallas. Repitamos la ronda, ¡sé que tú puedes!', 0.92);
+
+        btn.onclick = () => {
+          modal.classList.add('hidden');
+          setupRound();
+        };
+      } else if (GameState.round < GameState.maxRounds) {
+        // Avanzar a la siguiente ronda (Ronda 1 -> 2, o Ronda 2 -> 3)
+        icon.textContent = '🌟';
+        title.textContent = `¡Excelente Ronda ${GameState.round}!`;
+        msg.textContent = `¡Felicidades! Completaste la ronda con ${GameState.mistakes === 0 ? 'cero fallas' : 'solo 1 falla'}.`;
+        btn.textContent = `SIGUIENTE RONDA (${GameState.round + 1} / 3) ➡️`;
+        btn.className = 'w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-lg shadow-lg transition cursor-pointer';
+
+        VoiceEngine.speak(`¡Muy bien! Pasamos a la ronda ${GameState.round + 1}.`, 0.92);
+
+        btn.onclick = () => {
+          modal.classList.add('hidden');
+          GameState.round += 1;
+          setupRound();
+        };
+      } else {
+        // Última ronda (Ronda 3) superada con menos de 2 fallas -> Reiniciar actividad
+        icon.textContent = '🏆';
+        title.textContent = '¡FELICIDADES, LO LOGRASTE!';
+        msg.textContent = 'Completaste las 3 rondas leyendo, uniendo y coloreando todos los dibujos.';
+        btn.textContent = '🔁 REINICIAR ACTIVIDAD';
+        btn.className = 'w-full py-4 px-6 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black text-lg shadow-lg transition cursor-pointer';
+
+        VoiceEngine.speak('¡Muchas felicidades! Completaste toda la actividad.', 0.92);
+
+        btn.onclick = () => {
+          modal.classList.add('hidden');
+          GameState.round = 1;
+          GameState.usedWordIds.clear();
+          setupRound();
+          VoiceEngine.speak('LEE Y UNE CON SU DIBUJO Y LUEGO COLOREA', 0.9);
+        };
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    /**
+     * ============================================================================
+     * 7. INICIALIZACIÓN DE EVENTOS Y ARRANQUE
+     * ============================================================================
+     */
+    const MAIN_INSTRUCTION = "LEE Y UNE CON SU DIBUJO Y LUEGO COLOREA";
+
+    document.getElementById('btnStartActivity').addEventListener('click', () => {
+      SoundFX.ensureContext();
+      document.getElementById('welcomeOverlay').classList.add('hidden');
+      setupRound();
+      VoiceEngine.speak(MAIN_INSTRUCTION, 0.9);
+    });
+
+    document.getElementById('btnRepeatInstruction').addEventListener('click', () => {
+      SoundFX.playPop();
+      VoiceEngine.speak(MAIN_INSTRUCTION, 0.9);
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      VoiceEngine.init();
+      setupRound();
+    });
+  </script>
+</body>
+</html>
